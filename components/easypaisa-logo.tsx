@@ -24,14 +24,14 @@ export function EasyPaisaLogo({
     compact: "drop-shadow-sm",
   }
 
-  // Mobile responsive sizing
-  const mobileWidth = mobile ? Math.floor(width * 0.7) : width
-  const mobileHeight = mobile ? Math.floor(height * 0.7) : height
+  // Ultra mobile responsive sizing
+  const mobileWidth = mobile ? Math.floor(width * 0.6) : width
+  const mobileHeight = mobile ? Math.floor(height * 0.6) : height
 
   const logoContent = (
     <div
-      className={`backdrop-blur-sm rounded-xl p-2 sm:p-3 shadow-lg border border-gray-100 text-black bg-transparent transition-all duration-300 ${
-        clickable ? "hover:shadow-xl hover:scale-105 active:scale-95 cursor-pointer" : ""
+      className={`backdrop-blur-sm rounded-lg sm:rounded-xl p-1.5 sm:p-3 shadow-lg border border-gray-100 text-black bg-transparent transition-all duration-300 ${
+        clickable ? "hover:shadow-xl hover:scale-105 active:scale-95 cursor-pointer touch-manipulation" : ""
       }`}
     >
       <Image
