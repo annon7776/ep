@@ -16,11 +16,33 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Users, CheckCircle, Clock, DollarSign, Search, RefreshCw, Edit, Trash2, Timer } from "lucide-react"
+import {
+  Users,
+  CheckCircle,
+  Clock,
+  DollarSign,
+  Search,
+  RefreshCw,
+  Edit,
+  Trash2,
+  Timer,
+  Bell,
+  Wifi,
+  WifiOff,
+  AlertCircle,
+} from "lucide-react"
 import type { Customer } from "@/lib/database"
 import { Header } from "@/components/header"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
+
+interface Notification {
+  id: string
+  message: string
+  type: "verified" | "pending" | "rejected"
+  timestamp: Date
+  customerName: string
+}
 
 export default function AdminDashboard() {
   /* ------------------------------------------------------------------ */
@@ -46,6 +68,17 @@ export default function AdminDashboard() {
   const [refreshCountdown, setRefreshCountdown] = useState(3)
   const [lastRefreshTime, setLastRefreshTime] = useState<Date>(new Date())
 
+  /* notifications */
+  const [notifications, setNotifications] = useState<Notification[]>([])
+  const [showNotifications, setShowNotifications] = useState(false)
+
+  /* connection status */
+  const [isOnline, setIsOnline] = useState(true)
+  const [connectionError, setConnectionError] = useState<string | null>(null)
+
+  /* previous customers for comparison */
+  const [previousCustomers, setPreviousCustomers] = useState<Customer[]>([])
+
   /* ------------------------------------------------------------------ */
   /*  EFFECTS                                                           */
   /* ------------------------------------------------------------------ */
@@ -68,9 +101,24 @@ export default function AdminDashboard() {
       })
     }, 1_000)
 
+    // Connection status listeners
+    const handleOnline = () => {
+      setIsOnline(true)
+      setConnectionError(null)
+    }
+    const handleOffline = () => {
+      setIsOnline(false)
+      setConnectionError("No internet connection")
+    }
+
+    window.addEventListener("online", handleOnline)
+    window.addEventListener("offline", handleOffline)
+
     return () => {
       clearInterval(refreshInterval)
       clearInterval(countdownInterval)
+      window.removeEventListener("online", handleOnline)
+      window.removeEventListener("offline", handleOffline)
     }
   }, [])
 
@@ -83,23 +131,81 @@ export default function AdminDashboard() {
   /* ------------------------------------------------------------------ */
   async function loadData() {
     setIsLoading(true)
-    const res = await getCustomersData()
-    if (res.success) {
-      setCustomers(res.customers)
-      setLastRefreshTime(new Date())
-      /* derive stats */
-      const total = res.customers.length
-      const verified = res.customers.filter((c) => c.verification_status === "verified").length
-      const pending = res.customers.filter((c) => c.verification_status === "pending").length
-      const avg = total > 0 ? res.customers.reduce((s, c) => s + c.current_balance, 0) / total : 0
-      setStats({
-        total_verifications: total,
-        verified_customers: verified,
-        pending_review: pending,
-        avg_balance: avg,
-      })
+    setConnectionError(null)
+
+    try {
+      const res = await getCustomersData()
+      if (res.success) {
+        // Check for new customers and status changes
+        checkForNotifications(res.customers)
+
+        setPreviousCustomers(customers)
+        setCustomers(res.customers)
+        setLastRefreshTime(new Date())
+        setIsOnline(true)
+
+        /* derive stats */
+        const total = res.customers.length
+        const verified = res.customers.filter((c) => c.verification_status === "verified").length
+        const pending = res.customers.filter((c) => c.verification_status === "pending").length
+        const avg = total > 0 ? res.customers.reduce((s, c) => s + c.current_balance, 0) / total : 0
+        setStats({
+          total_verifications: total,
+          verified_customers: verified,
+          pending_review: pending,
+          avg_balance: avg,
+        })
+      } else {
+        setConnectionError("Failed to fetch data")
+        setIsOnline(false)
+      }
+    } catch (error) {
+      setConnectionError("Network error occurred")
+      setIsOnline(false)
     }
+
     setIsLoading(false)
+  }
+
+  function checkForNotifications(newCustomers: Customer[]) {
+    if (previousCustomers.length === 0) return
+
+    const newNotifications: Notification[] = []
+
+    // Check for new customers
+    newCustomers.forEach((newCustomer) => {
+      const existingCustomer = previousCustomers.find((c) => c.id === newCustomer.id)
+
+      if (!existingCustomer) {
+        // New customer
+        newNotifications.push({
+          id: `new-${newCustomer.id}-${Date.now()}`,
+          message: `${newCustomer.full_name} submitted a new verification request`,
+          type: "pending",
+          timestamp: new Date(),
+          customerName: newCustomer.full_name,
+        })
+      } else if (existingCustomer.verification_status !== newCustomer.verification_status) {
+        // Status changed
+        const statusMessages = {
+          verified: `${newCustomer.full_name} verified their account`,
+          pending: `${newCustomer.full_name} account is pending review`,
+          rejected: `${newCustomer.full_name} account verification was rejected`,
+        }
+
+        newNotifications.push({
+          id: `status-${newCustomer.id}-${Date.now()}`,
+          message: statusMessages[newCustomer.verification_status],
+          type: newCustomer.verification_status,
+          timestamp: new Date(),
+          customerName: newCustomer.full_name,
+        })
+      }
+    })
+
+    if (newNotifications.length > 0) {
+      setNotifications((prev) => [...newNotifications, ...prev].slice(0, 50)) // Keep last 50 notifications
+    }
   }
 
   function filterCustomers() {
@@ -136,6 +242,20 @@ export default function AdminDashboard() {
     setRefreshCountdown(3) // Reset countdown
   }
 
+  function clearNotifications() {
+    setNotifications([])
+  }
+
+  function getConnectionStatusColor() {
+    if (!isOnline || connectionError) return "text-red-600 bg-red-50 border-red-200"
+    return "text-green-600 bg-green-50 border-green-200"
+  }
+
+  function getConnectionStatusIcon() {
+    if (!isOnline || connectionError) return <WifiOff className="w-4 h-4" />
+    return <Wifi className="w-4 h-4" />
+  }
+
   /* ------------------------------------------------------------------ */
   /*  RENDER                                                            */
   /* ------------------------------------------------------------------ */
@@ -149,24 +269,107 @@ export default function AdminDashboard() {
       />
 
       <main className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-6">
-        {/* ───────────────────── Refresh Status Bar ─────────────────── */}
+        {/* ───────────────────── Connection & Refresh Status Bar ─────────────────── */}
         <Card className="mb-6 shadow-lg border-0 bg-gradient-to-r from-emerald-50 to-green-50">
           <CardContent className="p-4">
             <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
-                  <span className="text-sm font-medium text-emerald-700">Auto-refresh active</span>
-                </div>
-                <div className="flex items-center gap-2 text-emerald-600">
-                  <Timer className="w-4 h-4" />
-                  <span className="text-sm font-mono">
-                    Next refresh in: <span className="font-bold text-lg">{refreshCountdown}s</span>
-                  </span>
+              <div className="flex items-center gap-4">
+                {/* Connection Status */}
+                <Badge className={`px-3 py-1 ${getConnectionStatusColor()}`}>
+                  {getConnectionStatusIcon()}
+                  <span className="ml-1 font-medium">{isOnline && !connectionError ? "Online" : "Offline"}</span>
+                </Badge>
+
+                {/* Auto-refresh Status */}
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2">
+                    <div
+                      className={`w-3 h-3 rounded-full ${isOnline ? "bg-green-500 animate-pulse" : "bg-red-500"}`}
+                    ></div>
+                    <span className="text-sm font-medium text-emerald-700">
+                      {isOnline ? "Auto-refresh active" : "Auto-refresh paused"}
+                    </span>
+                  </div>
+                  {isOnline && (
+                    <div className="flex items-center gap-2 text-emerald-600">
+                      <Timer className="w-4 h-4" />
+                      <span className="text-sm font-mono">
+                        Next refresh in: <span className="font-bold text-lg">{refreshCountdown}s</span>
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
 
               <div className="flex items-center gap-3">
+                {/* Notifications */}
+                <div className="relative">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowNotifications(!showNotifications)}
+                    className="bg-white/50 border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                  >
+                    <Bell className="w-4 h-4 mr-1" />
+                    Notifications
+                    {notifications.length > 0 && (
+                      <Badge className="ml-2 bg-red-500 text-white text-xs px-1 py-0 min-w-[1.25rem] h-5">
+                        {notifications.length}
+                      </Badge>
+                    )}
+                  </Button>
+
+                  {/* Notifications Dropdown */}
+                  {showNotifications && (
+                    <div className="absolute right-0 top-full mt-2 w-80 bg-white rounded-lg shadow-xl border border-gray-200 z-50 max-h-96 overflow-y-auto">
+                      <div className="p-3 border-b border-gray-200 flex justify-between items-center">
+                        <h3 className="font-semibold text-gray-900">Recent Activity</h3>
+                        {notifications.length > 0 && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={clearNotifications}
+                            className="text-xs text-gray-500 hover:text-gray-700"
+                          >
+                            Clear All
+                          </Button>
+                        )}
+                      </div>
+                      <div className="max-h-80 overflow-y-auto">
+                        {notifications.length === 0 ? (
+                          <div className="p-4 text-center text-gray-500">
+                            <Bell className="w-8 h-8 mx-auto mb-2 text-gray-300" />
+                            <p>No recent activity</p>
+                          </div>
+                        ) : (
+                          notifications.map((notification) => (
+                            <div key={notification.id} className="p-3 border-b border-gray-100 hover:bg-gray-50">
+                              <div className="flex items-start gap-3">
+                                <div
+                                  className={`w-2 h-2 rounded-full mt-2 flex-shrink-0 ${
+                                    notification.type === "verified"
+                                      ? "bg-green-500"
+                                      : notification.type === "pending"
+                                        ? "bg-orange-500"
+                                        : "bg-red-500"
+                                  }`}
+                                ></div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm text-gray-900 font-medium">{notification.message}</p>
+                                  <p className="text-xs text-gray-500 mt-1">
+                                    {notification.timestamp.toLocaleTimeString()}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Last Updated & Manual Refresh */}
                 <Badge variant="outline" className="bg-white/50 text-emerald-700 border-emerald-200">
                   <Clock className="w-3 h-3 mr-1" />
                   Last: {lastRefreshTime.toLocaleTimeString()}
@@ -184,15 +387,25 @@ export default function AdminDashboard() {
               </div>
             </div>
 
-            {/* Progress bar for countdown */}
-            <div className="mt-3">
-              <div className="w-full bg-emerald-100 rounded-full h-2">
-                <div
-                  className="bg-gradient-to-r from-emerald-500 to-green-500 h-2 rounded-full transition-all duration-1000 ease-linear"
-                  style={{ width: `${((3 - refreshCountdown) / 3) * 100}%` }}
-                ></div>
+            {/* Connection Error Message */}
+            {connectionError && (
+              <div className="mt-3 p-2 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-red-600" />
+                <span className="text-sm text-red-700">{connectionError}</span>
               </div>
-            </div>
+            )}
+
+            {/* Progress bar for countdown */}
+            {isOnline && (
+              <div className="mt-3">
+                <div className="w-full bg-emerald-100 rounded-full h-2">
+                  <div
+                    className="bg-gradient-to-r from-emerald-500 to-green-500 h-2 rounded-full transition-all duration-1000 ease-linear"
+                    style={{ width: `${((3 - refreshCountdown) / 3) * 100}%` }}
+                  ></div>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -273,7 +486,9 @@ export default function AdminDashboard() {
               {isLoading && <RefreshCw className="w-4 h-4 animate-spin ml-2" />}
             </CardTitle>
             <CardDescription className="text-sm sm:text-base">
-              Auto-refreshes every 3 seconds • Next update in {refreshCountdown}s
+              {isOnline
+                ? `Auto-refreshes every 3 seconds • Next update in ${refreshCountdown}s`
+                : "Auto-refresh paused - Check connection"}
             </CardDescription>
           </CardHeader>
           <CardContent className="p-0">
@@ -415,6 +630,9 @@ export default function AdminDashboard() {
           </DialogContent>
         </Dialog>
       )}
+
+      {/* Click outside to close notifications */}
+      {showNotifications && <div className="fixed inset-0 z-40" onClick={() => setShowNotifications(false)} />}
     </div>
   )
 }
