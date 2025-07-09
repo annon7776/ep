@@ -86,19 +86,3 @@ export function Header({ showHomeLink = false, variant = "default", title, subti
 
           {/* Right side - Navigation */}
           {showHomeLink && (
-            <Button
-              variant="outline"
-              asChild
-              className="shadow-sm bg-white/80 backdrop-blur-sm text-xs sm:text-sm px-2 sm:px-4 py-1 sm:py-2"
-            >
-              <a href="/">
-                <Home className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
-                <span className="hidden sm:inline">Home</span>
-              </a>
-            </Button>
-          )}
-        </div>
-      </div>
-    </header>
-  )
-}
