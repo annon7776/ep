@@ -47,7 +47,7 @@ export default function AdminDashboard() {
   /* ------------------------------------------------------------------ */
   useEffect(() => {
     loadData()
-    const interval = setInterval(loadData, 30_000) // auto-refresh
+    const interval = setInterval(loadData, 3_000) // auto-refresh
     return () => clearInterval(interval)
   }, [])
 
@@ -112,7 +112,12 @@ export default function AdminDashboard() {
   /* ------------------------------------------------------------------ */
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-gray-100">
-      <Header variant="admin" showHomeLink title="Admin Dashboard" subtitle="Real-time verification management" />
+      <Header
+        variant="admin"
+        showHomeLink
+        title="Admin Dashboard"
+        subtitle="Real-time verification management • Auto-refresh every 3 seconds"
+      />
 
       <main className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-6">
         {/* ───────────────────────── Stats ───────────────────────── */}
@@ -186,7 +191,7 @@ export default function AdminDashboard() {
               <Users className="w-5 h-5" />
               Customer Verification Management
             </CardTitle>
-            <CardDescription className="text-sm sm:text-base">Auto-refreshes every 30 s</CardDescription>
+            <CardDescription className="text-sm sm:text-base">Auto-refreshes every 3 seconds</CardDescription>
           </CardHeader>
           <CardContent className="p-0">
             {isLoading ? (
