@@ -28,10 +28,11 @@ export async function submitVerification(formData: FormData) {
       return { success: false, error: "Invalid account number format" }
     }
 
+    // Create customer with 'unverified' status by default
     await createCustomer(data)
     revalidatePath("/admin")
 
-    return { success: true, message: "Verification request submitted successfully!" }
+    return { success: true, message: "Verification request submitted successfully! Please wait for admin approval." }
   } catch (error: any) {
     if (error.message?.includes("duplicate key")) {
       return { success: false, error: "Account number already exists" }
@@ -42,7 +43,7 @@ export async function submitVerification(formData: FormData) {
 
 export async function updateVerificationStatus(
   id: number,
-  status: "pending" | "verified" | "rejected",
+  status: "pending" | "verified" | "rejected" | "unverified",
   adminNotes?: string,
 ) {
   try {

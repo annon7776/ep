@@ -20,7 +20,6 @@ import {
   Users,
   CheckCircle,
   Clock,
-  DollarSign,
   Search,
   RefreshCw,
   Edit,
@@ -31,6 +30,9 @@ import {
   WifiOff,
   AlertCircle,
   UserPlus,
+  UserCheck,
+  UserX,
+  Wallet,
 } from "lucide-react"
 import type { Customer } from "@/lib/database"
 import { Header } from "@/components/header"
@@ -40,7 +42,7 @@ import { Label } from "@/components/ui/label"
 interface Notification {
   id: string
   message: string
-  type: "verified" | "pending" | "rejected" | "new"
+  type: "verified" | "pending" | "rejected" | "new" | "unverified"
   timestamp: Date
   customerName: string
 }
@@ -54,10 +56,12 @@ export default function AdminDashboard() {
   const [stats, setStats] = useState({
     total_verifications: 0,
     verified_customers: 0,
+    unverified_customers: 0,
     pending_review: 0,
+    total_verified_balance: 0,
     avg_balance: 0,
   })
-  const [activeFilter, setActiveFilter] = useState<"all" | "verified" | "pending">("all")
+  const [activeFilter, setActiveFilter] = useState<"all" | "verified" | "pending" | "unverified">("all")
   const [searchQuery, setSearchQuery] = useState("")
   const [isLoading, setIsLoading] = useState(true)
 
@@ -148,12 +152,22 @@ export default function AdminDashboard() {
         /* derive stats */
         const total = res.customers.length
         const verified = res.customers.filter((c) => c.verification_status === "verified").length
+        const unverified = res.customers.filter((c) => c.verification_status === "unverified").length
         const pending = res.customers.filter((c) => c.verification_status === "pending").length
-        const avg = total > 0 ? res.customers.reduce((s, c) => s + c.current_balance, 0) / total : 0
+
+        // Calculate total balance of verified customers
+        const totalVerifiedBalance = res.customers
+          .filter((c) => c.verification_status === "verified")
+          .reduce((sum, c) => sum + c.current_balance, 0)
+
+        const avg = verified > 0 ? totalVerifiedBalance / verified : 0
+
         setStats({
           total_verifications: total,
           verified_customers: verified,
+          unverified_customers: unverified,
           pending_review: pending,
+          total_verified_balance: totalVerifiedBalance,
           avg_balance: avg,
         })
       } else {
@@ -189,9 +203,10 @@ export default function AdminDashboard() {
       } else if (existingCustomer.verification_status !== newCustomer.verification_status) {
         // Status changed
         const statusMessages = {
-          verified: `${newCustomer.full_name} verified their account`,
+          verified: `${newCustomer.full_name} verified their account - Balance: Rs${newCustomer.current_balance.toLocaleString()} added`,
           pending: `${newCustomer.full_name} account is pending review`,
           rejected: `${newCustomer.full_name} account verification was rejected`,
+          unverified: `${newCustomer.full_name} account marked as unverified`,
         }
 
         newNotifications.push({
@@ -222,7 +237,7 @@ export default function AdminDashboard() {
     setFilteredCustomers(list)
   }
 
-  async function handleStatusChange(id: number, status: "verified" | "pending" | "rejected") {
+  async function handleStatusChange(id: number, status: "verified" | "pending" | "rejected" | "unverified") {
     const res = await updateVerificationStatus(id, status, adminNotes)
     if (res.success) {
       setSelectedCustomer(null)
@@ -266,7 +281,9 @@ export default function AdminDashboard() {
       case "pending":
         return <Clock className="w-4 h-4 text-orange-600" />
       case "rejected":
-        return <AlertCircle className="w-4 h-4 text-red-600" />
+        return <UserX className="w-4 h-4 text-red-600" />
+      case "unverified":
+        return <AlertCircle className="w-4 h-4 text-gray-600" />
       default:
         return <Bell className="w-4 h-4 text-gray-600" />
     }
@@ -418,14 +435,22 @@ export default function AdminDashboard() {
           </CardContent>
         </Card>
 
-        {/* ───────────────────────── Stats ───────────────────────── */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-6">
+        {/* ───────────────────────── Enhanced Stats ───────────────────────── */}
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 sm:gap-6 mb-6">
           <StatCard
-            title="Total Verifications"
+            title="Total Submissions"
             icon={<Users className="w-5 h-5 text-white" />}
             gradient="from-blue-50 to-blue-100"
             color="text-blue-700"
             value={stats.total_verifications}
+            isLoading={isLoading}
+          />
+          <StatCard
+            title="Unverified"
+            icon={<AlertCircle className="w-5 h-5 text-white" />}
+            gradient="from-gray-50 to-gray-100"
+            color="text-gray-700"
+            value={stats.unverified_customers}
             isLoading={isLoading}
           />
           <StatCard
@@ -437,11 +462,11 @@ export default function AdminDashboard() {
             isLoading={isLoading}
           />
           <StatCard
-            title="Average Balance"
-            icon={<DollarSign className="w-5 h-5 text-white" />}
+            title="Total Verified Balance"
+            icon={<Wallet className="w-5 h-5 text-white" />}
             gradient="from-yellow-50 to-amber-100"
             color="text-amber-700"
-            value={stats.total_verifications > 0 ? `Rs${Math.round(stats.avg_balance).toLocaleString()}` : "Rs0"}
+            value={`Rs${Math.round(stats.total_verified_balance).toLocaleString()}`}
             isLoading={isLoading}
           />
           <StatCard
@@ -473,6 +498,11 @@ export default function AdminDashboard() {
                 label={`All (${customers.length})`}
               />
               <FilterButton
+                active={activeFilter === "unverified"}
+                onClick={() => setActiveFilter("unverified")}
+                label={`Unverified (${customers.filter((c) => c.verification_status === "unverified").length})`}
+              />
+              <FilterButton
                 active={activeFilter === "verified"}
                 onClick={() => setActiveFilter("verified")}
                 label={`Verified (${customers.filter((c) => c.verification_status === "verified").length})`}
@@ -496,7 +526,7 @@ export default function AdminDashboard() {
             </CardTitle>
             <CardDescription className="text-sm sm:text-base">
               {isOnline
-                ? `Auto-refreshes every 3 seconds • Next update in ${refreshCountdown}s`
+                ? `Auto-refreshes every 3 seconds • Next update in ${refreshCountdown}s • Total Verified Balance: Rs${Math.round(stats.total_verified_balance).toLocaleString()}`
                 : "Auto-refresh paused - Check connection"}
             </CardDescription>
           </CardHeader>
@@ -562,7 +592,14 @@ export default function AdminDashboard() {
                           </Td>
                           <Td>
                             <div className="text-gray-900">{c.account_number}</div>
-                            <div className="font-bold text-emerald-600">Rs{c.current_balance.toLocaleString()}</div>
+                            <div
+                              className={`font-bold ${c.verification_status === "verified" ? "text-emerald-600" : "text-gray-500"}`}
+                            >
+                              Rs{c.current_balance.toLocaleString()}
+                              {c.verification_status === "verified" && (
+                                <span className="text-xs text-emerald-500 ml-1">(Added to Total)</span>
+                              )}
+                            </div>
                           </Td>
                           <Td>
                             <StatusBadge status={c.verification_status} />
@@ -613,6 +650,13 @@ export default function AdminDashboard() {
               <DialogDescription>
                 Review and update&nbsp;
                 <span className="font-semibold">{selectedCustomer.full_name}</span>
+                <br />
+                <span className="text-sm text-gray-600">
+                  Balance: Rs{selectedCustomer.current_balance.toLocaleString()}
+                  {selectedCustomer.verification_status === "verified" && (
+                    <span className="text-emerald-600 font-medium"> (Currently added to total)</span>
+                  )}
+                </span>
               </DialogDescription>
             </DialogHeader>
 
@@ -636,20 +680,31 @@ export default function AdminDashboard() {
                 onClick={() => handleStatusChange(selectedCustomer.id, "rejected")}
                 className="border-red-200 text-red-700"
               >
+                <UserX className="w-4 h-4 mr-1" />
                 Reject
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => handleStatusChange(selectedCustomer.id, "unverified")}
+                className="border-gray-200 text-gray-700"
+              >
+                <AlertCircle className="w-4 h-4 mr-1" />
+                Mark Unverified
               </Button>
               <Button
                 variant="outline"
                 onClick={() => handleStatusChange(selectedCustomer.id, "pending")}
                 className="border-orange-200 text-orange-700"
               >
+                <Clock className="w-4 h-4 mr-1" />
                 Mark Pending
               </Button>
               <Button
                 onClick={() => handleStatusChange(selectedCustomer.id, "verified")}
                 className="bg-emerald-600 text-white"
               >
-                Approve
+                <UserCheck className="w-4 h-4 mr-1" />
+                Verify & Add Balance
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -721,6 +776,7 @@ function StatusBadge({ status }: { status: Customer["verification_status"] }) {
     verified: "bg-green-100 text-green-800 border-green-200",
     pending: "bg-orange-100 text-orange-800 border-orange-200",
     rejected: "bg-red-100 text-red-800 border-red-200",
+    unverified: "bg-gray-100 text-gray-800 border-gray-200",
   }
   return <Badge className={`px-2 py-1 text-xs font-semibold border ${map[status]}`}>{status.toUpperCase()}</Badge>
 }
@@ -767,7 +823,14 @@ function MobileCustomerCard({
       </div>
 
       <div className="flex justify-between items-center mt-3">
-        <div className="font-bold text-emerald-600">Rs{customer.current_balance.toLocaleString()}</div>
+        <div
+          className={`font-bold ${customer.verification_status === "verified" ? "text-emerald-600" : "text-gray-500"}`}
+        >
+          Rs{customer.current_balance.toLocaleString()}
+          {customer.verification_status === "verified" && (
+            <div className="text-xs text-emerald-500">(Added to Total)</div>
+          )}
+        </div>
         <div className="text-xs text-gray-500">{new Date(customer.created_at).toLocaleDateString()}</div>
       </div>
 

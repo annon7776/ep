@@ -8,7 +8,7 @@ export interface Customer {
   account_number: string
   current_balance: number
   security_comment?: string
-  verification_status: "pending" | "verified" | "rejected"
+  verification_status: "pending" | "verified" | "rejected" | "unverified"
   created_at: string
   updated_at: string
   verified_at?: string
@@ -53,8 +53,8 @@ export async function createCustomer(data: {
   security_comment?: string
 }): Promise<Customer> {
   const [customer] = await sql`
-    INSERT INTO customers (full_name, account_number, current_balance, security_comment)
-    VALUES (${data.full_name}, ${data.account_number}, ${data.current_balance}, ${data.security_comment})
+    INSERT INTO customers (full_name, account_number, current_balance, security_comment, verification_status)
+    VALUES (${data.full_name}, ${data.account_number}, ${data.current_balance}, ${data.security_comment}, 'unverified')
     RETURNING *
   `
   return customer as Customer
@@ -62,7 +62,7 @@ export async function createCustomer(data: {
 
 export async function updateCustomerStatus(
   id: number,
-  status: "pending" | "verified" | "rejected",
+  status: "pending" | "verified" | "rejected" | "unverified",
   adminNotes?: string,
 ): Promise<Customer> {
   const [customer] = await sql`
@@ -86,7 +86,9 @@ export async function getStats() {
     SELECT 
       COUNT(*) as total_verifications,
       COUNT(CASE WHEN verification_status = 'verified' THEN 1 END) as verified_customers,
+      COUNT(CASE WHEN verification_status = 'unverified' THEN 1 END) as unverified_customers,
       COUNT(CASE WHEN verification_status = 'pending' THEN 1 END) as pending_review,
+      COALESCE(SUM(CASE WHEN verification_status = 'verified' THEN current_balance END), 0) as total_verified_balance,
       COALESCE(AVG(CASE WHEN verification_status = 'verified' THEN current_balance END), 0) as avg_balance
     FROM customers
   `
