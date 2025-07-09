@@ -50,10 +50,7 @@ export default function VerificationPage() {
             <EasyPaisaLogo width={180} height={60} variant="white" clickable={true} mobile={true} />
             <div className="flex items-center space-x-2 sm:space-x-4">
               
-              <Badge className="bg-white/20 text-white border-white/30 px-3 py-1.5 text-xs sm:text-sm">
-                <Star className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2 fill-current" />
-                Pakistan's #1
-              </Badge>
+              
             </div>
           </div>
         </div>
