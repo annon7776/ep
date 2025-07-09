@@ -77,10 +77,7 @@ export function Header({ showHomeLink = false, variant = "default", title, subti
           <div className="flex items-center">
             <EasyPaisaLogo width={160} height={53} clickable={true} mobile={true} />
             {title && (
-              <div className="hidden sm:block ml-6 border-l-2 border-gray-200 pl-6">
-                <h1 className="text-xl font-bold text-gray-900">{title}</h1>
-                {subtitle && <p className="text-gray-600 text-sm">{subtitle}</p>}
-              </div>
+              
             )}
           </div>
 
