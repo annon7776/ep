@@ -30,6 +30,7 @@ import {
   Wifi,
   WifiOff,
   AlertCircle,
+  UserPlus,
 } from "lucide-react"
 import type { Customer } from "@/lib/database"
 import { Header } from "@/components/header"
@@ -39,7 +40,7 @@ import { Label } from "@/components/ui/label"
 interface Notification {
   id: string
   message: string
-  type: "verified" | "pending" | "rejected"
+  type: "verified" | "pending" | "rejected" | "new"
   timestamp: Date
   customerName: string
 }
@@ -181,7 +182,7 @@ export default function AdminDashboard() {
         newNotifications.push({
           id: `new-${newCustomer.id}-${Date.now()}`,
           message: `${newCustomer.full_name} submitted a new verification request`,
-          type: "pending",
+          type: "new",
           timestamp: new Date(),
           customerName: newCustomer.full_name,
         })
@@ -254,6 +255,21 @@ export default function AdminDashboard() {
   function getConnectionStatusIcon() {
     if (!isOnline || connectionError) return <WifiOff className="w-4 h-4" />
     return <Wifi className="w-4 h-4" />
+  }
+
+  function getNotificationIcon(type: Notification["type"]) {
+    switch (type) {
+      case "new":
+        return <UserPlus className="w-4 h-4 text-blue-600" />
+      case "verified":
+        return <CheckCircle className="w-4 h-4 text-green-600" />
+      case "pending":
+        return <Clock className="w-4 h-4 text-orange-600" />
+      case "rejected":
+        return <AlertCircle className="w-4 h-4 text-red-600" />
+      default:
+        return <Bell className="w-4 h-4 text-gray-600" />
+    }
   }
 
   /* ------------------------------------------------------------------ */
@@ -340,20 +356,13 @@ export default function AdminDashboard() {
                           <div className="p-4 text-center text-gray-500">
                             <Bell className="w-8 h-8 mx-auto mb-2 text-gray-300" />
                             <p>No recent activity</p>
+                            <p className="text-xs mt-1">Customer activities will appear here</p>
                           </div>
                         ) : (
                           notifications.map((notification) => (
                             <div key={notification.id} className="p-3 border-b border-gray-100 hover:bg-gray-50">
                               <div className="flex items-start gap-3">
-                                <div
-                                  className={`w-2 h-2 rounded-full mt-2 flex-shrink-0 ${
-                                    notification.type === "verified"
-                                      ? "bg-green-500"
-                                      : notification.type === "pending"
-                                        ? "bg-orange-500"
-                                        : "bg-red-500"
-                                  }`}
-                                ></div>
+                                <div className="mt-1">{getNotificationIcon(notification.type)}</div>
                                 <div className="flex-1 min-w-0">
                                   <p className="text-sm text-gray-900 font-medium">{notification.message}</p>
                                   <p className="text-xs text-gray-500 mt-1">
@@ -432,7 +441,7 @@ export default function AdminDashboard() {
             icon={<DollarSign className="w-5 h-5 text-white" />}
             gradient="from-yellow-50 to-amber-100"
             color="text-amber-700"
-            value={`Rs${Math.round(stats.avg_balance).toLocaleString()}`}
+            value={stats.total_verifications > 0 ? `Rs${Math.round(stats.avg_balance).toLocaleString()}` : "Rs0"}
             isLoading={isLoading}
           />
           <StatCard
@@ -493,9 +502,25 @@ export default function AdminDashboard() {
           </CardHeader>
           <CardContent className="p-0">
             {isLoading && customers.length === 0 ? (
-              <EmptyState icon={<RefreshCw className="animate-spin" />} text="Loading…" />
+              <EmptyState icon={<RefreshCw className="animate-spin" />} text="Loading customer data..." />
             ) : filteredCustomers.length === 0 ? (
-              <EmptyState icon={<Users />} text="No records found" />
+              <EmptyState
+                icon={<Users />}
+                text={
+                  customers.length === 0
+                    ? "No customer verifications yet"
+                    : searchQuery
+                      ? "No matching customers found"
+                      : "No customers in this category"
+                }
+                subtitle={
+                  customers.length === 0
+                    ? "Customer verification requests will appear here when submitted"
+                    : searchQuery
+                      ? "Try adjusting your search terms"
+                      : "Try selecting a different filter"
+                }
+              />
             ) : (
               <>
                 {/* mobile cards */}
@@ -700,11 +725,22 @@ function StatusBadge({ status }: { status: Customer["verification_status"] }) {
   return <Badge className={`px-2 py-1 text-xs font-semibold border ${map[status]}`}>{status.toUpperCase()}</Badge>
 }
 
-function EmptyState({ icon, text }: { icon: React.ReactNode; text: string }) {
+function EmptyState({
+  icon,
+  text,
+  subtitle,
+}: {
+  icon: React.ReactNode
+  text: string
+  subtitle?: string
+}) {
   return (
     <div className="flex flex-col items-center justify-center py-12 sm:py-16 text-gray-600 gap-4">
       <div className="w-12 h-12 sm:w-16 sm:h-16 text-gray-400">{icon}</div>
-      <p className="text-base sm:text-lg">{text}</p>
+      <div className="text-center">
+        <p className="text-base sm:text-lg font-medium">{text}</p>
+        {subtitle && <p className="text-sm text-gray-500 mt-1">{subtitle}</p>}
+      </div>
     </div>
   )
 }
