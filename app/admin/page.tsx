@@ -16,7 +16,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Users, CheckCircle, Clock, DollarSign, Search, RefreshCw, Edit, Trash2 } from "lucide-react"
+import { Users, CheckCircle, Clock, DollarSign, Search, RefreshCw, Edit, Trash2, Timer } from "lucide-react"
 import type { Customer } from "@/lib/database"
 import { Header } from "@/components/header"
 import { Textarea } from "@/components/ui/textarea"
@@ -24,7 +24,7 @@ import { Label } from "@/components/ui/label"
 
 export default function AdminDashboard() {
   /* ------------------------------------------------------------------ */
-  /*  STATE                                                             */
+  /*  STATE                                                             */
   /* ------------------------------------------------------------------ */
   const [customers, setCustomers] = useState<Customer[]>([])
   const [filteredCustomers, setFilteredCustomers] = useState<Customer[]>([])
@@ -42,13 +42,36 @@ export default function AdminDashboard() {
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
   const [adminNotes, setAdminNotes] = useState("")
 
+  /* refresh counter */
+  const [refreshCountdown, setRefreshCountdown] = useState(3)
+  const [lastRefreshTime, setLastRefreshTime] = useState<Date>(new Date())
+
   /* ------------------------------------------------------------------ */
-  /*  EFFECTS                                                           */
+  /*  EFFECTS                                                           */
   /* ------------------------------------------------------------------ */
   useEffect(() => {
     loadData()
-    const interval = setInterval(loadData, 3_000) // auto-refresh
-    return () => clearInterval(interval)
+
+    // Main refresh interval (3 seconds)
+    const refreshInterval = setInterval(() => {
+      loadData()
+      setRefreshCountdown(3) // Reset countdown
+    }, 3_000)
+
+    // Countdown timer (updates every second)
+    const countdownInterval = setInterval(() => {
+      setRefreshCountdown((prev) => {
+        if (prev <= 1) {
+          return 3 // Reset to 3 when it reaches 0
+        }
+        return prev - 1
+      })
+    }, 1_000)
+
+    return () => {
+      clearInterval(refreshInterval)
+      clearInterval(countdownInterval)
+    }
   }, [])
 
   useEffect(() => {
@@ -56,13 +79,14 @@ export default function AdminDashboard() {
   }, [customers, activeFilter, searchQuery])
 
   /* ------------------------------------------------------------------ */
-  /*  HELPERS                                                           */
+  /*  HELPERS                                                           */
   /* ------------------------------------------------------------------ */
   async function loadData() {
     setIsLoading(true)
     const res = await getCustomersData()
     if (res.success) {
       setCustomers(res.customers)
+      setLastRefreshTime(new Date())
       /* derive stats */
       const total = res.customers.length
       const verified = res.customers.filter((c) => c.verification_status === "verified").length
@@ -107,8 +131,13 @@ export default function AdminDashboard() {
     }
   }
 
+  function handleManualRefresh() {
+    loadData()
+    setRefreshCountdown(3) // Reset countdown
+  }
+
   /* ------------------------------------------------------------------ */
-  /*  RENDER                                                            */
+  /*  RENDER                                                            */
   /* ------------------------------------------------------------------ */
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-gray-100">
@@ -116,11 +145,58 @@ export default function AdminDashboard() {
         variant="admin"
         showHomeLink
         title="Admin Dashboard"
-        subtitle="Real-time verification management • Auto-refresh every 3 seconds"
+        subtitle={`Real-time verification management • Last updated: ${lastRefreshTime.toLocaleTimeString()}`}
       />
 
       <main className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-6">
-        {/* ───────────────────────── Stats ───────────────────────── */}
+        {/* ───────────────────── Refresh Status Bar ─────────────────── */}
+        <Card className="mb-6 shadow-lg border-0 bg-gradient-to-r from-emerald-50 to-green-50">
+          <CardContent className="p-4">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
+                  <span className="text-sm font-medium text-emerald-700">Auto-refresh active</span>
+                </div>
+                <div className="flex items-center gap-2 text-emerald-600">
+                  <Timer className="w-4 h-4" />
+                  <span className="text-sm font-mono">
+                    Next refresh in: <span className="font-bold text-lg">{refreshCountdown}s</span>
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <Badge variant="outline" className="bg-white/50 text-emerald-700 border-emerald-200">
+                  <Clock className="w-3 h-3 mr-1" />
+                  Last: {lastRefreshTime.toLocaleTimeString()}
+                </Badge>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleManualRefresh}
+                  disabled={isLoading}
+                  className="bg-white/50 border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                >
+                  <RefreshCw className={`w-4 h-4 mr-1 ${isLoading ? "animate-spin" : ""}`} />
+                  Refresh Now
+                </Button>
+              </div>
+            </div>
+
+            {/* Progress bar for countdown */}
+            <div className="mt-3">
+              <div className="w-full bg-emerald-100 rounded-full h-2">
+                <div
+                  className="bg-gradient-to-r from-emerald-500 to-green-500 h-2 rounded-full transition-all duration-1000 ease-linear"
+                  style={{ width: `${((3 - refreshCountdown) / 3) * 100}%` }}
+                ></div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* ───────────────────────── Stats ───────────────────────── */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-6">
           <StatCard
             title="Total Verifications"
@@ -128,6 +204,7 @@ export default function AdminDashboard() {
             gradient="from-blue-50 to-blue-100"
             color="text-blue-700"
             value={stats.total_verifications}
+            isLoading={isLoading}
           />
           <StatCard
             title="Verified Customers"
@@ -135,6 +212,7 @@ export default function AdminDashboard() {
             gradient="from-green-50 to-emerald-100"
             color="text-green-700"
             value={stats.verified_customers}
+            isLoading={isLoading}
           />
           <StatCard
             title="Average Balance"
@@ -142,6 +220,7 @@ export default function AdminDashboard() {
             gradient="from-yellow-50 to-amber-100"
             color="text-amber-700"
             value={`Rs${Math.round(stats.avg_balance).toLocaleString()}`}
+            isLoading={isLoading}
           />
           <StatCard
             title="Pending Review"
@@ -149,10 +228,11 @@ export default function AdminDashboard() {
             gradient="from-orange-50 to-red-100"
             color="text-orange-700"
             value={stats.pending_review}
+            isLoading={isLoading}
           />
         </div>
 
-        {/* ───────────────────── Search & Filters ────────────────── */}
+        {/* ───────────────────── Search & Filters ────────────────── */}
         <Card className="mb-8 shadow-lg border-0">
           <CardContent className="p-4 sm:p-6">
             <div className="flex flex-col sm:flex-row sm:items-center gap-4">
@@ -184,17 +264,20 @@ export default function AdminDashboard() {
           </CardContent>
         </Card>
 
-        {/* ───────────────────── Customer List ──────────────────── */}
+        {/* ───────────────────── Customer List ──────────────────── */}
         <Card className="shadow-xl border-0">
           <CardHeader className="bg-gradient-to-r from-emerald-600 to-green-600 p-4 sm:p-6 text-white">
             <CardTitle className="flex items-center gap-2 text-lg sm:text-xl">
               <Users className="w-5 h-5" />
               Customer Verification Management
+              {isLoading && <RefreshCw className="w-4 h-4 animate-spin ml-2" />}
             </CardTitle>
-            <CardDescription className="text-sm sm:text-base">Auto-refreshes every 3 seconds</CardDescription>
+            <CardDescription className="text-sm sm:text-base">
+              Auto-refreshes every 3 seconds • Next update in {refreshCountdown}s
+            </CardDescription>
           </CardHeader>
           <CardContent className="p-0">
-            {isLoading ? (
+            {isLoading && customers.length === 0 ? (
               <EmptyState icon={<RefreshCw className="animate-spin" />} text="Loading…" />
             ) : filteredCustomers.length === 0 ? (
               <EmptyState icon={<Users />} text="No records found" />
@@ -211,6 +294,7 @@ export default function AdminDashboard() {
                         setAdminNotes(c.admin_notes || "")
                       }}
                       onDelete={() => handleDelete(c.id)}
+                      isLoading={isLoading}
                     />
                   ))}
                 </div>
@@ -229,7 +313,7 @@ export default function AdminDashboard() {
                     </thead>
                     <tbody className="divide-y">
                       {filteredCustomers.map((c) => (
-                        <tr key={c.id} className="hover:bg-gray-50">
+                        <tr key={c.id} className={`hover:bg-gray-50 ${isLoading ? "opacity-75" : ""}`}>
                           <Td>
                             <div className="font-medium">{c.full_name}</div>
                             {c.security_comment && (
@@ -280,7 +364,7 @@ export default function AdminDashboard() {
         </Card>
       </main>
 
-      {/* ───────────────────── Modal ──────────────────── */}
+      {/* ───────────────────── Modal ──────────────────── */}
       {selectedCustomer && (
         <Dialog open onOpenChange={() => setSelectedCustomer(null)}>
           <DialogContent className="max-w-md">
@@ -335,7 +419,7 @@ export default function AdminDashboard() {
   )
 }
 
-/* ───────────────────────── Reusable Pieces ───────────────────────── */
+/* ───────────────────────── Reusable Pieces ───────────────────────── */
 
 function StatCard({
   title,
@@ -343,19 +427,21 @@ function StatCard({
   gradient,
   color,
   value,
+  isLoading = false,
 }: {
   title: string
   icon: React.ReactNode
   gradient: string
   color: string
   value: number | string
+  isLoading?: boolean
 }) {
   return (
-    <Card className={`shadow-lg border-0 bg-gradient-to-br ${gradient}`}>
+    <Card className={`shadow-lg border-0 bg-gradient-to-br ${gradient} ${isLoading ? "animate-pulse" : ""}`}>
       <CardHeader className="flex items-center justify-between p-3 sm:p-4 pb-1">
         <CardTitle className={`text-xs sm:text-sm font-semibold ${color}`}>{title}</CardTitle>
         <div className="w-8 h-8 sm:w-10 sm:h-10 bg-opacity-80 rounded-lg flex items-center justify-center bg-current">
-          {icon}
+          {isLoading ? <RefreshCw className="w-4 h-4 animate-spin text-white" /> : icon}
         </div>
       </CardHeader>
       <CardContent className="p-3 sm:p-4 pt-0">
@@ -409,13 +495,15 @@ function MobileCustomerCard({
   customer,
   onEdit,
   onDelete,
+  isLoading = false,
 }: {
   customer: Customer
   onEdit: () => void
   onDelete: () => void
+  isLoading?: boolean
 }) {
   return (
-    <div className="p-4">
+    <div className={`p-4 ${isLoading ? "opacity-75" : ""}`}>
       <div className="flex justify-between items-start">
         <div>
           <div className="font-semibold">{customer.full_name}</div>
